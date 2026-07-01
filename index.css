@@ -821,3 +821,38 @@ input:checked + .switch-slider:before {
     bottom: 52%;
   }
 }
+
+/* Custom NoGo Areas & Button Styles */
+#add-nogo-btn.active {
+  background-color: rgba(239, 68, 68, 0.25) !important;
+  border-color: #ef4444 !important;
+  color: #fca5a5 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+.leaflet-interactive.nogo-zone-circle {
+  fill: #ef4444 !important;
+  fill-opacity: 0.25 !important;
+  stroke: #ef4444 !important;
+  stroke-width: 1.5 !important;
+  stroke-dasharray: 5, 5 !important;
+}
+
+.nogo-popup-btn {
+  background-color: #ef4444;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.nogo-popup-btn:hover {
+  background-color: #dc2626;
+}

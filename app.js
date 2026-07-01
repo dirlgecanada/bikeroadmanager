@@ -11,6 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
     direction: "any",   // "any", "N", "E", "S", "W"
     strictRoad: true,
     avoidTraffic: true,
+    avoidBridges: true, // avoid bridges toggle status
+    nogos: [],          // custom no-go zones array: { latlng, radius, circle }
+    nogoMode: false,    // true if next click on map adds a no-go zone
     routesData: [null, null, null], // data returned by BRouter for each alternative
     activeRouteIdx: 0,
     polylines: [null, null, null], // Leaflet polyline objects
@@ -127,9 +130,52 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Helper to add a custom No-Go zone
+  function addNogoZone(latlng, radius = 200) {
+    const circle = L.circle(latlng, {
+      radius: radius,
+      className: 'nogo-zone-circle'
+    }).addTo(map);
+
+    const nogoItem = {
+      id: Date.now(),
+      latlng: latlng,
+      radius: radius,
+      circle: circle
+    };
+
+    // Add popup with delete button
+    const popupContent = document.createElement("div");
+    popupContent.style.textAlign = "center";
+    popupContent.innerHTML = `
+      <div style="font-size: 11px; margin-bottom: 4px; font-weight: bold; color: #ef4444; font-family: var(--font-display);">Zone à éviter</div>
+      <button class="nogo-popup-btn">Supprimer</button>
+    `;
+    
+    popupContent.querySelector(".nogo-popup-btn").onclick = () => {
+      map.removeLayer(circle);
+      state.nogos = state.nogos.filter(n => n.id !== nogoItem.id);
+    };
+
+    circle.bindPopup(popupContent);
+    state.nogos.push(nogoItem);
+  }
+
   // Handle map click
   map.on("click", (e) => {
-    if (state.mode === "point2point" && state.startLatLng && !state.destLatLng) {
+    if (state.nogoMode) {
+      addNogoZone(e.latlng);
+      state.nogoMode = false;
+      const nogoBtn = document.getElementById("add-nogo-btn");
+      nogoBtn.classList.remove("active");
+      nogoBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="margin-right: 4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        Bloquer une zone sur la carte
+      `;
+      if (state.startLatLng) {
+        document.getElementById("instruction-overlay").classList.add("hidden");
+      }
+    } else if (state.mode === "point2point" && state.startLatLng && !state.destLatLng) {
       setDestPoint(e.latlng);
       reverseGeocodeDest(e.latlng.lat, e.latlng.lng);
     } else {
@@ -349,6 +395,39 @@ document.addEventListener("DOMContentLoaded", () => {
     state.avoidTraffic = e.target.checked;
   });
 
+  const avoidBridgesToggle = document.getElementById("avoid-bridges-toggle");
+  avoidBridgesToggle.addEventListener("change", (e) => {
+    state.avoidBridges = e.target.checked;
+  });
+
+  const addNogoBtn = document.getElementById("add-nogo-btn");
+  addNogoBtn.addEventListener("click", () => {
+    state.nogoMode = !state.nogoMode;
+    if (state.nogoMode) {
+      addNogoBtn.classList.add("active");
+      addNogoBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="margin-right: 4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Cliquez sur la carte...
+      `;
+      const instructionText = document.querySelector("#instruction-overlay p");
+      instructionText.innerText = "Cliquez sur la carte pour bloquer une zone de 200m (ex: un pont ou une route).";
+      document.getElementById("instruction-overlay").classList.remove("hidden");
+    } else {
+      addNogoBtn.classList.remove("active");
+      addNogoBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="margin-right: 4px; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        Bloquer une zone sur la carte
+      `;
+      if (state.startLatLng) {
+        document.getElementById("instruction-overlay").classList.add("hidden");
+      } else {
+        const instructionText = document.querySelector("#instruction-overlay p");
+        instructionText.innerText = "Cliquez n'importe où sur la carte pour définir le point de départ de votre boucle cycliste.";
+        document.getElementById("instruction-overlay").classList.remove("hidden");
+      }
+    }
+  });
+
   // --- Route Generation Controller ---
   const generateBtn = document.getElementById("generate-btn");
   generateBtn.addEventListener("click", () => {
@@ -445,9 +524,24 @@ document.addEventListener("DOMContentLoaded", () => {
   async function fetchAlternativeRoute(idx) {
     const profile = getBRouterProfile();
     
+    // Construct nogos parameter
+    let nogoStrings = [];
+    if (state.avoidBridges) {
+      // Default: Pont de Québec (-71.2867,46.7456,300)
+      nogoStrings.push("-71.2867,46.7456,300");
+    }
+    state.nogos.forEach(n => {
+      nogoStrings.push(`${n.latlng.lng.toFixed(6)},${n.latlng.lat.toFixed(6)},${n.radius}`);
+    });
+    
+    let nogoParam = "";
+    if (nogoStrings.length > 0) {
+      nogoParam = `&nogos=${encodeURIComponent(nogoStrings.join("|"))}`;
+    }
+    
     if (state.mode === "point2point") {
       // For A to B, BRouter can return alternatives using the `alternativeidx` parameter
-      const url = `https://brouter.de/brouter?lonlats=${state.startLatLng.lng},${state.startLatLng.lat}|${state.destLatLng.lng},${state.destLatLng.lat}&profile=${profile}&alternativeidx=${idx}&format=geojson`;
+      const url = `https://brouter.de/brouter?lonlats=${state.startLatLng.lng},${state.startLatLng.lat}|${state.destLatLng.lng},${state.destLatLng.lat}&profile=${profile}&alternativeidx=${idx}&format=geojson${nogoParam}`;
       const data = await queryBRouter(url);
       return data ? { idx, data } : null;
     }
@@ -467,7 +561,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Construct lonlats query param
       const coordsString = loopCoordinates.map(c => `${c.lng},${c.lat}`).join("|");
-      const url = `https://brouter.de/brouter?lonlats=${coordsString}&profile=${profile}&alternativeidx=0&format=geojson`;
+      const url = `https://brouter.de/brouter?lonlats=${coordsString}&profile=${profile}&alternativeidx=0&format=geojson${nogoParam}`;
       
       const data = await queryBRouter(url);
       
