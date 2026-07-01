@@ -749,16 +749,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const start = coordinates[0];
     const end = coordinates[len - 1];
     
-    // Choose waypoints to force the shape of the loop.
-    // For a triangle, waypoints at 1/3 and 2/3 of coordinates index are perfect!
-    const wp1 = coordinates[Math.floor(len * 0.33)];
-    const wp2 = coordinates[Math.floor(len * 0.66)];
+    // Extract up to 8 intermediate waypoints to force the shape of the loop
+    const numWaypoints = Math.min(8, len - 2);
+    const waypointsArr = [];
+    if (numWaypoints > 0) {
+      const step = (len - 1) / (numWaypoints + 1);
+      for (let i = 1; i <= numWaypoints; i++) {
+        const wp = coordinates[Math.floor(i * step)];
+        waypointsArr.push(`${wp[1]},${wp[0]}`);
+      }
+    }
     
     const origin = `${start[1]},${start[0]}`;
     const destination = `${end[1]},${end[0]}`;
-    const waypoints = `${wp1[1]},${wp1[0]}|${wp2[1]},${wp2[0]}`;
+    const waypoints = waypointsArr.join("|");
     
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${encodeURIComponent(waypoints)}&travelmode=bicycling`;
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+    if (waypoints) {
+      url += `&waypoints=${encodeURIComponent(waypoints)}`;
+    }
+    url += `&travelmode=bicycling`;
     window.open(url, "_blank");
   }
 
@@ -768,17 +778,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (len < 2) return;
     
     const start = coordinates[0];
-    const wp1 = coordinates[Math.floor(len * 0.33)];
-    const wp2 = coordinates[Math.floor(len * 0.66)];
     const end = coordinates[len - 1];
     
-    // Apple Maps structures multi-stop routing as successive daddr parameters:
+    // Extract up to 8 intermediate waypoints to force the shape of the loop
+    const numWaypoints = Math.min(8, len - 2);
+    const stops = [];
+    if (numWaypoints > 0) {
+      const step = (len - 1) / (numWaypoints + 1);
+      for (let i = 1; i <= numWaypoints; i++) {
+        const wp = coordinates[Math.floor(i * step)];
+        stops.push(`${wp[1]},${wp[0]}`);
+      }
+    }
+    stops.push(`${end[1]},${end[0]}`);
+    
     const saddr = `${start[1]},${start[0]}`;
-    const daddrs = [
-      `${wp1[1]},${wp1[0]}`,
-      `${wp2[1]},${wp2[0]}`,
-      `${end[1]},${end[0]}`
-    ].map(coords => `daddr=${coords}`).join("&");
+    const daddrs = stops.map(coords => `daddr=${coords}`).join("&");
     
     const url = `https://maps.apple.com/?saddr=${saddr}&${daddrs}&dirflg=b`;
     window.open(url, "_blank");
